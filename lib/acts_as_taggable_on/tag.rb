@@ -18,54 +18,59 @@ module ActsAsTaggableOn
     end
 
     ### SCOPES:
-    scope :most_used, ->(limit = 20) { order('taggings_count desc').limit(limit) }
-    scope :least_used, ->(limit = 20) { order('taggings_count asc').limit(limit) }
+    scope :most_used, ->(company_id, limit = 20) { where(company_id: company_id).order('taggings_count desc').limit(limit) }
+    scope :least_used, ->(company_id, limit = 20) { where(company_id: company_id).order('taggings_count asc').limit(limit) }
 
-    def self.named(name)
+    def self.named(name, company_id)
       if ActsAsTaggableOn.strict_case_match
         where(["name = #{binary}?", as_8bit_ascii(name)])
       else
         where(['LOWER(name) = LOWER(?)', as_8bit_ascii(unicode_downcase(name))])
-      end
+      end.where(company_id: company_id)
     end
 
-    def self.named_any(list)
+    def self.named_any(list, company_id)
       clause = list.map { |tag|
         sanitize_sql_for_named_any(tag).force_encoding('BINARY')
       }.join(' OR ')
-      where(clause)
+      where(clause).where(company_id: company_id)
     end
 
-    def self.named_like(name)
+    def self.named_like(name, company_id)
       clause = ["name #{ActsAsTaggableOn::Utils.like_operator} ? ESCAPE '!'", "%#{ActsAsTaggableOn::Utils.escape_like(name)}%"]
-      where(clause)
+      where(clause).where(company_id: company_id)
     end
 
-    def self.named_like_any(list)
+    def self.named_like_any(list, company_id)
       clause = list.map { |tag|
         sanitize_sql(["name #{ActsAsTaggableOn::Utils.like_operator} ? ESCAPE '!'", "%#{ActsAsTaggableOn::Utils.escape_like(tag.to_s)}%"])
       }.join(' OR ')
-      where(clause)
+      where(clause).where(company_id: company_id)
     end
 
-    def self.for_context(context)
+    def self.for_context(context, company_id)
       joins(:taggings).
         where(["taggings.context = ?", context]).
+        where(company_id: company_id).
         select("DISTINCT tags.*")
     end
 
     ### CLASS METHODS:
 
-    def self.find_or_create_with_like_by_name(name)
+    def self.find_or_create_with_like_by_name(name, company_id)
       if ActsAsTaggableOn.strict_case_match
-        self.find_or_create_all_with_like_by_name([name]).first
+        self.find_or_create_all_with_like_by_name([name], company_id).first
       else
-        named_like(name).first || create(name: name)
+        named_like(name, company_id).first || create(name: name, company_id: company_id)
       end
     end
 
     def self.find_or_create_all_with_like_by_name(*list)
       list = Array(list).flatten
+      if !list.last.is_a?(Hash) || list.last[:company_id].blank?
+        raise "find_or_create_all_with_like_by_name expects company_id"
+      end
+      company_id = list.pop[:company_id]
 
       return [] if list.empty?
 
@@ -73,7 +78,7 @@ module ActsAsTaggableOn
         begin
           tries ||= 3
 
-          existing_tags = named_any(list)
+          existing_tags = named_any(list, company_id)
           comparable_tag_name = comparable_name(tag_name)
           existing_tag = existing_tags.find { |tag| comparable_name(tag.name) == comparable_tag_name }
           existing_tag || create(name: tag_name)

@@ -220,7 +220,9 @@ module ActsAsTaggableOn::Taggable
     ##
     # Find existing tags or create non-existing tags
     def load_tags(tag_list)
-      ActsAsTaggableOn::Tag.find_or_create_all_with_like_by_name(tag_list)
+      company_id = is_a?(Company) ? id : try(:company_id)
+      raise "cannot call load_tags from #{self.class.name}, company_id not found" unless company_id
+      ActsAsTaggableOn::Tag.find_or_create_all_with_like_by_name(tag_list, company_id: company_id)
     end
 
     def save_tags
