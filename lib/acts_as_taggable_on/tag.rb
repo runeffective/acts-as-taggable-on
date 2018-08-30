@@ -9,7 +9,7 @@ module ActsAsTaggableOn
     ### VALIDATIONS:
 
     validates_presence_of :name
-    validates_uniqueness_of :name, if: :validates_name_uniqueness?
+    validates_uniqueness_of :name, scope: :company_id, if: :validates_name_uniqueness?
     validates_length_of :name, maximum: 255
 
     # monkey patch this method if don't need name uniqueness validation
@@ -59,7 +59,7 @@ module ActsAsTaggableOn
 
     def self.find_or_create_with_like_by_name(name, company_id)
       if ActsAsTaggableOn.strict_case_match
-        self.find_or_create_all_with_like_by_name([name], company_id).first
+        self.find_or_create_all_with_like_by_name([name], company_id: company_id).first
       else
         named_like(name, company_id).first || create(name: name, company_id: company_id)
       end
@@ -81,7 +81,7 @@ module ActsAsTaggableOn
           existing_tags = named_any(list, company_id)
           comparable_tag_name = comparable_name(tag_name)
           existing_tag = existing_tags.find { |tag| comparable_name(tag.name) == comparable_tag_name }
-          existing_tag || create(name: tag_name)
+          existing_tag || create(name: tag_name, company_id: company_id)
         rescue ActiveRecord::RecordNotUnique
           if (tries -= 1).positive?
             ActiveRecord::Base.connection.execute 'ROLLBACK'
